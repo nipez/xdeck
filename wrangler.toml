@@ -1,0 +1,40 @@
+# xdeck — Cloudflare Workers + static assets (Vite build)
+name = "xdeck"
+main = "worker/index.ts"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Serve the Vite SPA from the Worker (Workers Assets)
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "xdeck-db"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "migrations"
+
+# Optional KV for OAuth state / magic-link tokens (short-lived)
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "00000000-0000-0000-0000-000000000002"
+preview_id = "00000000-0000-0000-0000-000000000002"
+
+# Keyword / brand-listen polling every 5 minutes
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+APP_NAME = "xdeck"
+APP_URL = "http://localhost:8787"
+# DEMO_MODE is auto-enabled when X_CLIENT_ID is unset
+PLAN_NAME = "starter"
+
+# Secrets (set via `wrangler secret put` or .dev.vars for local):
+# AUTH_SECRET
+# TOKEN_ENCRYPTION_KEY
+# X_CLIENT_ID
+# X_CLIENT_SECRET
+# (optional) RESEND_API_KEY for real magic-link email

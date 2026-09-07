@@ -8,3 +8,6 @@ dist
 .env.*
 !.env.example
 .vite
+
+.deploy-secrets.env
+.dev.vars

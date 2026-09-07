@@ -13,14 +13,14 @@ not_found_handling = "single-page-application"
 [[d1_databases]]
 binding = "DB"
 database_name = "xdeck-db"
-database_id = "00000000-0000-0000-0000-000000000001"
+database_id = "058562ed-e8c4-4cef-b462-79327df79ebe"
 migrations_dir = "migrations"
 
 # Optional KV for OAuth state / magic-link tokens (short-lived)
 [[kv_namespaces]]
 binding = "SESSIONS"
-id = "00000000-0000-0000-0000-000000000002"
-preview_id = "00000000-0000-0000-0000-000000000002"
+id = "0c413cfc98f1490ab2860dd42c425fe2"
+preview_id = "0c413cfc98f1490ab2860dd42c425fe2"
 
 # Keyword / brand-listen polling every 5 minutes
 [triggers]
@@ -28,7 +28,7 @@ crons = ["*/5 * * * *"]
 
 [vars]
 APP_NAME = "xdeck"
-APP_URL = "http://localhost:8787"
+APP_URL = "https://xdeck.nickperez.workers.dev"
 # DEMO_MODE is auto-enabled when X_CLIENT_ID is unset
 PLAN_NAME = "starter"
 

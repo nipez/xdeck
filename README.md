@@ -21,7 +21,9 @@ Browser ──► Worker (Hono /api/* + SPA assets)
                 └── X API (OAuth 2.0 + PKCE, recent search) when credentials are set
 ```
 
-**Demo mode:** if `X_CLIENT_ID` / `X_CLIENT_SECRET` are unset, the API serves sample posts, a demo X account, and stub magic-link URLs so the deck is fully demoable locally.
+**Demo mode:** if `X_CLIENT_ID` / `X_CLIENT_SECRET` are unset, the API serves sample posts, a demo X account, and stub magic-link URLs so the deck is fully demoable locally. When credentials **are** set, `DEMO_POSTS` are never served — missing tokens or X API errors return an empty feed (with `needsXAccount` / `error` when applicable).
+
+On Connect X (OAuth callback), any columns with `x_account_id IS NULL` are bound to the newly connected account so Home/Mentions/etc. use that token.
 
 ## Quick start (local)
 
@@ -114,6 +116,7 @@ Also in `wrangler.toml` `[vars]`: `APP_NAME`, `PLAN_NAME`.
 5. Keyword brand-listen with Starter caps (3 keywords, 1,000 mentions/month); pause UI when capped
 6. Cron every 5 minutes + on-demand poll; timeline columns client-refresh
 7. Landing at `/`, deck at `/app`
+8. Lists column loads **owned lists** from the connected X account when live (`list.read`); demo mode still uses sample list names
 
 ## Out of scope (v0)
 
@@ -122,6 +125,8 @@ Also in `wrangler.toml` `[vars]`: `APP_NAME`, `PLAN_NAME`.
 - Stripe / billing (limits are code constants)  
 - Native mobile apps  
 - Enterprise firehose / filtered stream (recent search + polling only)
+- Full reverse-chronological home timeline (v0 uses recent search as a stand-in when home access is restricted)
+- Following/subscribed lists beyond owned lists (owned lists only for v0)
 
 ## D1 migrations
 

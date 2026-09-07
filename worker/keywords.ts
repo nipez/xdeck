@@ -89,7 +89,7 @@ export async function pollAllKeywords(env: Env): Promise<{
 
     const remaining = usage.maxMentionsPerMonth - usage.mentionsUsed;
     const token = await getAccessToken(env, kw.x_account_id);
-    const posts = await fetchTimelinePosts(env, token, "keyword", {
+    const { posts } = await fetchTimelinePosts(env, token, "keyword", {
       keyword: kw.phrase,
     });
 

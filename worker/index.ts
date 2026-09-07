@@ -17,8 +17,8 @@ import { isDemoMode } from "./env";
 import { getUsage, pollAllKeywords } from "./keywords";
 import {
   connectDemoAccount,
-  demoLists,
   fetchTimelinePosts,
+  fetchUserLists,
   finishXOAuth,
   startXOAuth,
 } from "./x";
@@ -176,6 +176,18 @@ app.post("/api/columns", requireAuth, async (c) => {
     ({ home: "Home", mentions: "Mentions", list: "List", keyword: "Keyword" }[
       body.type
     ] as string);
+
+  // Prefer explicit account, else the user's first connected X account.
+  let xAccountId = body.x_account_id ?? null;
+  if (!xAccountId) {
+    const first = await c.env.DB.prepare(
+      `SELECT id FROM x_accounts WHERE user_id = ? ORDER BY created_at ASC LIMIT 1`,
+    )
+      .bind(user.id)
+      .first<{ id: string }>();
+    xAccountId = first?.id ?? null;
+  }
+
   await c.env.DB.prepare(
     `INSERT INTO columns (id, user_id, type, title, position, x_account_id, list_id, keyword_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -186,7 +198,7 @@ app.post("/api/columns", requireAuth, async (c) => {
       body.type,
       title,
       (maxPos?.m ?? -1) + 1,
-      body.x_account_id ?? null,
+      xAccountId,
       body.list_id ?? null,
       body.keyword_id ?? null,
     )
@@ -266,6 +278,21 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
     .first<DeckColumn>();
   if (!col) return c.json({ error: "Not found" }, 404);
 
+  const resolved = await resolveAccountToken(c.env, user.id, col.x_account_id);
+  // Persist binding when we had to fall back to the user's first account.
+  if (
+    !col.x_account_id &&
+    resolved.accountId &&
+    !isDemoMode(c.env)
+  ) {
+    await c.env.DB.prepare(
+      `UPDATE columns SET x_account_id = ?, updated_at = datetime('now')
+       WHERE id = ? AND x_account_id IS NULL`,
+    )
+      .bind(resolved.accountId, col.id)
+      .run();
+  }
+
   if (col.type === "keyword") {
     const usage = await getUsage(c.env, user.id);
     let keywordPhrase: string | null = null;
@@ -307,22 +334,44 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
       source: "cache" as const,
     }));
 
+    let feedError: string | undefined;
     // If empty, live/demo fetch so the column isn't blank
     if (posts.length === 0) {
-      const token = await accountToken(c.env, col.x_account_id);
-      posts = await fetchTimelinePosts(c.env, token, "keyword", {
+      const live = await fetchTimelinePosts(c.env, resolved.token, "keyword", {
         keyword: keywordPhrase || "xdeck",
       });
+      posts = live.posts;
+      feedError = live.error;
     }
 
-    return c.json({ posts, usage, keyword: keywordPhrase, capped: usage.capped });
+    return c.json({
+      posts,
+      usage,
+      keyword: keywordPhrase,
+      capped: usage.capped,
+      needsXAccount: resolved.needsXAccount,
+      error: feedError,
+    });
   }
 
-  const token = await accountToken(c.env, col.x_account_id);
-  const posts = await fetchTimelinePosts(c.env, token, col.type, {
+  const live = await fetchTimelinePosts(c.env, resolved.token, col.type, {
     listId: col.list_id,
   });
-  return c.json({ posts, lists: col.type === "list" ? demoLists() : undefined });
+
+  let lists:
+    | { lists: Array<{ id: string; name: string }>; demo: boolean; error?: string }
+    | undefined;
+  if (col.type === "list") {
+    lists = await fetchUserLists(c.env, resolved.token);
+  }
+
+  return c.json({
+    posts: live.posts,
+    needsXAccount: resolved.needsXAccount,
+    error: live.error ?? lists?.error,
+    lists: lists?.lists,
+    listsDemo: lists?.demo,
+  });
 });
 
 // ——— Keywords ———
@@ -403,7 +452,15 @@ app.post("/api/keywords/poll", requireAuth, async (c) => {
 });
 
 app.get("/api/lists", requireAuth, async (c) => {
-  return c.json({ lists: demoLists() });
+  const user = c.get("user")!;
+  const resolved = await resolveAccountToken(c.env, user.id, null);
+  const result = await fetchUserLists(c.env, resolved.token);
+  return c.json({
+    lists: result.lists,
+    demo: result.demo,
+    needsXAccount: resolved.needsXAccount,
+    error: result.error,
+  });
 });
 
 async function listAccounts(env: Env, userId: string): Promise<XAccount[]> {
@@ -416,18 +473,58 @@ async function listAccounts(env: Env, userId: string): Promise<XAccount[]> {
   return rows.results ?? [];
 }
 
-async function accountToken(
+/**
+ * Resolve a bearer token for a column.
+ * If the column has no x_account_id, use the user's first connected account.
+ * In live mode with no accounts, needsXAccount is true (do not serve DEMO_POSTS).
+ */
+async function resolveAccountToken(
   env: Env,
+  userId: string,
   xAccountId: string | null,
-): Promise<string | null> {
-  if (!xAccountId || isDemoMode(env)) return null;
+): Promise<{
+  token: string | null;
+  accountId: string | null;
+  needsXAccount: boolean;
+}> {
+  if (isDemoMode(env)) {
+    return { token: null, accountId: xAccountId, needsXAccount: false };
+  }
+
+  let accountId = xAccountId;
+  if (!accountId) {
+    const fallback = await env.DB.prepare(
+      `SELECT id FROM x_accounts WHERE user_id = ? ORDER BY created_at ASC LIMIT 1`,
+    )
+      .bind(userId)
+      .first<{ id: string }>();
+    accountId = fallback?.id ?? null;
+  }
+
+  if (!accountId) {
+    return { token: null, accountId: null, needsXAccount: true };
+  }
+
   const row = await env.DB.prepare(
-    `SELECT access_token_enc FROM x_accounts WHERE id = ?`,
+    `SELECT access_token_enc FROM x_accounts WHERE id = ? AND user_id = ?`,
   )
-    .bind(xAccountId)
+    .bind(accountId, userId)
     .first<{ access_token_enc: string }>();
-  if (!row) return null;
-  return decryptSecret(row.access_token_enc, env.TOKEN_ENCRYPTION_KEY);
+
+  if (!row) {
+    return { token: null, accountId: null, needsXAccount: true };
+  }
+
+  try {
+    return {
+      token: await decryptSecret(row.access_token_enc, env.TOKEN_ENCRYPTION_KEY),
+      accountId,
+      needsXAccount: false,
+    };
+  } catch {
+    // Corrupt / undecryptable token — treat as missing rather than 500 the feed.
+    return { token: null, accountId, needsXAccount: true };
+  }
 }
 
 export default {

@@ -29,6 +29,7 @@ export function Column({
   const [capped, setCapped] = useState(false);
   const [lists, setLists] = useState<Array<{ id: string; name: string }>>([]);
   const [error, setError] = useState<string | null>(null);
+  const [needsXAccount, setNeedsXAccount] = useState(false);
 
   const loadFeed = useCallback(async () => {
     setLoading(true);
@@ -37,7 +38,11 @@ export function Column({
       const data = await api.feed(column.id);
       setPosts(data.posts);
       setCapped(!!data.capped);
+      setNeedsXAccount(!!data.needsXAccount);
       if (data.lists) setLists(data.lists);
+      if (data.error && data.posts.length === 0) {
+        setError(data.error);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -140,9 +145,30 @@ export function Column({
         {loading && posts.length === 0 && (
           <p className="muted pad">Loading…</p>
         )}
-        {error && <p className="error-text pad">{error}</p>}
-        {!loading && posts.length === 0 && !error && (
-          <p className="muted pad">No posts yet.</p>
+        {needsXAccount && !loading && (
+          <div className="col-empty pad">
+            <p className="col-empty-title">Connect an X account</p>
+            <p className="muted">
+              This column has no connected account yet. Use Accounts in the side
+              rail to connect X, then refresh.
+            </p>
+          </div>
+        )}
+        {!needsXAccount && error && posts.length === 0 && (
+          <div className="col-empty pad">
+            <p className="col-empty-title">Couldn’t load posts</p>
+            <p className="error-text">{error}</p>
+          </div>
+        )}
+        {!needsXAccount && !loading && posts.length === 0 && !error && (
+          <div className="col-empty pad">
+            <p className="col-empty-title">No posts</p>
+            <p className="muted">
+              {column.type === "list" && !column.list_id
+                ? "Select a list above to load posts."
+                : "Nothing to show right now."}
+            </p>
+          </div>
         )}
         {posts.map((p) => (
           <PostCard key={p.id} post={p} />

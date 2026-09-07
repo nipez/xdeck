@@ -122,10 +122,14 @@ export function DeckPage() {
             {usage?.capped && (
               <span className="badge badge-cap">Mentions capped</span>
             )}
+            {usage?.readsCapped && (
+              <span className="badge badge-cap">Reads capped</span>
+            )}
           </div>
           <div className="topbar-right muted">
             {usage && (
               <span>
+                {usage.readsUsed}/{usage.maxReadsPerMonth} reads ·{" "}
                 {usage.mentionsUsed}/{usage.maxMentionsPerMonth} mentions ·{" "}
                 {usage.keywordsUsed}/{usage.maxKeywords} keywords ·{" "}
                 {usage.plan}
@@ -157,6 +161,9 @@ export function DeckPage() {
                 await load();
               }}
               onColumnMetaChange={load}
+              onUsageMaybeChanged={() => {
+                refresh().catch(() => {});
+              }}
             />
           ))}
           {columns.length === 0 && (

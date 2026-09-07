@@ -85,7 +85,7 @@ export const api = {
   deleteColumn: (id: string) =>
     request<{ ok: boolean }>(`/api/columns/${id}`, { method: "DELETE" }),
 
-  feed: (id: string) =>
+  feed: (id: string, opts?: { refresh?: boolean }) =>
     request<{
       posts: DeckPost[];
       usage?: UsageStatus;
@@ -97,7 +97,11 @@ export const api = {
       error?: string;
       /** Effective list id after server clears stale demo/invalid ids */
       listId?: string | null;
-    }>(`/api/columns/${id}/feed`),
+      cached?: boolean;
+      source?: "live" | "demo" | "cache";
+    }>(
+      `/api/columns/${id}/feed${opts?.refresh ? "?refresh=1" : ""}`,
+    ),
 
   keywords: () =>
     request<{ keywords: Keyword[]; usage: UsageStatus }>("/api/keywords"),

@@ -1,5 +1,6 @@
 import {
   CRON_KEYWORD_LOOKBACK_MINUTES,
+  PERSONAL_READS_SOFT_CAP,
   PLAN_LIMITS,
   currentPeriod,
 } from "../shared/constants";
@@ -7,7 +8,10 @@ import type { UsageStatus } from "../shared/types";
 import { decryptSecret, randomId } from "./crypto";
 import type { Env } from "./env";
 import { isDemoMode } from "./env";
+import { ensureUsageRow, incrementReads } from "./feed-cache";
 import { fetchTimelinePosts } from "./x";
+
+export { ensureUsageRow };
 
 export async function getUsage(env: Env, userId: string): Promise<UsageStatus> {
   const plan = PLAN_LIMITS.starter;
@@ -18,30 +22,26 @@ export async function getUsage(env: Env, userId: string): Promise<UsageStatus> {
     .bind(userId)
     .first<{ c: number }>();
   const usage = await env.DB.prepare(
-    `SELECT mentions_count FROM usage_counters WHERE user_id = ? AND period = ?`,
+    `SELECT mentions_count, reads_count FROM usage_counters WHERE user_id = ? AND period = ?`,
   )
     .bind(userId, period)
-    .first<{ mentions_count: number }>();
+    .first<{ mentions_count: number; reads_count: number | null }>();
 
   const mentionsUsed = usage?.mentions_count ?? 0;
+  const readsUsed = usage?.reads_count ?? 0;
+  const maxReads = plan.maxReadsPerMonth ?? PERSONAL_READS_SOFT_CAP;
   return {
     plan: plan.name,
     maxKeywords: plan.maxKeywords,
     maxMentionsPerMonth: plan.maxMentionsPerMonth,
+    maxReadsPerMonth: maxReads,
     keywordsUsed: kw?.c ?? 0,
     mentionsUsed,
+    readsUsed,
     period,
     capped: mentionsUsed >= plan.maxMentionsPerMonth,
+    readsCapped: readsUsed >= maxReads,
   };
-}
-
-export async function ensureUsageRow(env: Env, userId: string) {
-  const period = currentPeriod();
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO usage_counters (user_id, period, mentions_count) VALUES (?, ?, 0)`,
-  )
-    .bind(userId, period)
-    .run();
 }
 
 async function getAccessToken(
@@ -92,6 +92,10 @@ export async function pollAllKeywords(env: Env): Promise<{
     const { posts } = await fetchTimelinePosts(env, token, "keyword", {
       keyword: kw.phrase,
     });
+
+    if (posts.length > 0 && posts[0]?.source === "live") {
+      await incrementReads(env, kw.user_id, posts.length);
+    }
 
     // Only consider "recent" window for cron semantics
     const cutoff = Date.now() - CRON_KEYWORD_LOOKBACK_MINUTES * 60 * 1000;

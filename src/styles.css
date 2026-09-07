@@ -606,6 +606,16 @@ select:focus {
   font-family: var(--mono);
 }
 
+.col-cache {
+  margin-left: 0.4rem;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  opacity: 0.85;
+}
+
 .col-actions {
   display: flex;
   flex-shrink: 0;

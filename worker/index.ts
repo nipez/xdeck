@@ -16,6 +16,12 @@ import type { Env } from "./env";
 import { isDemoMode } from "./env";
 import { getUsage, pollAllKeywords } from "./keywords";
 import {
+  incrementReads,
+  mergeFeedPosts,
+  readFeedCache,
+  writeFeedCache,
+} from "./feed-cache";
+import {
   connectDemoAccount,
   fetchTimelinePosts,
   fetchUserLists,
@@ -272,6 +278,8 @@ app.delete("/api/columns/:id", requireAuth, async (c) => {
 
 app.get("/api/columns/:id/feed", requireAuth, async (c) => {
   const user = c.get("user")!;
+  const forceRefresh =
+    c.req.query("refresh") === "1" || c.req.query("refresh") === "true";
   const col = await c.env.DB.prepare(
     `SELECT * FROM columns WHERE id = ? AND user_id = ?`,
   )
@@ -336,23 +344,32 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
     }));
 
     let feedError: string | undefined;
-    // If empty, live/demo fetch so the column isn't blank
-    if (posts.length === 0) {
+    let fromCache = posts.length > 0;
+    // Live fetch only when empty or explicit refresh (cron fills cache otherwise).
+    if (posts.length === 0 || forceRefresh) {
+      const sinceId = posts[0]?.id ?? null;
       const live = await fetchTimelinePosts(c.env, resolved.token, "keyword", {
         keyword: keywordPhrase || "xdeck",
         xUserId: resolved.xUserId,
+        sinceId: forceRefresh && posts.length > 0 ? sinceId : null,
       });
-      posts = live.posts;
+      if (live.posts.length > 0) {
+        await incrementReads(c.env, user.id, live.posts.length);
+        posts = mergeFeedPosts(live.posts, posts);
+        fromCache = false;
+      }
       feedError = live.error;
     }
 
     return c.json({
       posts,
-      usage,
+      usage: await getUsage(c.env, user.id),
       keyword: keywordPhrase,
       capped: usage.capped,
       needsXAccount: resolved.needsXAccount,
       error: feedError,
+      cached: fromCache,
+      source: fromCache ? "cache" : posts[0]?.source ?? "live",
     });
   }
 
@@ -385,19 +402,55 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
     }
   }
 
+  // Cache-first for home / mentions / list — avoid X on every open when warm.
+  const cached = await readFeedCache(c.env, col.id, user.id);
+  if (cached?.fresh && cached.posts.length > 0 && !forceRefresh) {
+    return c.json({
+      posts: cached.posts,
+      needsXAccount: resolved.needsXAccount,
+      error: undefined,
+      lists: lists?.lists,
+      listsDemo: lists?.demo,
+      listId,
+      cached: true,
+      source: "cache",
+    });
+  }
+
   const live = await fetchTimelinePosts(c.env, resolved.token, col.type, {
     listId,
     xUserId: resolved.xUserId,
+    sinceId:
+      !forceRefresh && cached?.newestPostId ? cached.newestPostId : null,
   });
 
+  let posts = live.posts;
+  if (live.posts.length > 0) {
+    await incrementReads(c.env, user.id, live.posts.length);
+    posts = mergeFeedPosts(live.posts, cached?.posts ?? []);
+    await writeFeedCache(c.env, col.id, user.id, posts);
+  } else if (cached?.posts.length) {
+    // Nothing new from X — re-warm TTL so we don't re-hit until cache expires again.
+    posts = cached.posts;
+    if (!live.error) {
+      await writeFeedCache(c.env, col.id, user.id, posts);
+    }
+  } else if (isDemoMode(c.env) && live.posts.length > 0) {
+    posts = live.posts;
+    await writeFeedCache(c.env, col.id, user.id, posts);
+  }
+
   return c.json({
-    posts: live.posts,
+    posts,
     needsXAccount: resolved.needsXAccount,
     // Prefer timeline error; list catalog errors shouldn't mask "Select a list".
     error: live.error ?? (col.type === "list" && listId ? lists?.error : undefined),
     lists: lists?.lists,
     listsDemo: lists?.demo,
     listId,
+    cached: posts.length > 0 && live.posts.length === 0,
+    source: live.posts.length > 0 ? "live" : "cache",
+    usage: await getUsage(c.env, user.id),
   });
 });
 

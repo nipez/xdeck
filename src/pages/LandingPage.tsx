@@ -60,7 +60,7 @@ export function LandingPage() {
           </li>
           <li>
             <strong>Cron polling</strong>
-            <span>Cloudflare Cron refreshes keyword search every few minutes.</span>
+            <span>Keyword search on a slow cron; timelines are cache-first + manual refresh to keep X COGS low.</span>
           </li>
         </ul>
       </section>

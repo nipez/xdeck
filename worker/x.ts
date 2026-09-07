@@ -257,6 +257,11 @@ export function isPlaceholderListId(listId: string | null | undefined): boolean 
   );
 }
 
+function withSinceId(baseQuery: string, sinceId?: string | null): string {
+  if (!sinceId || !/^\d+$/.test(sinceId)) return baseQuery;
+  return `${baseQuery}&since_id=${sinceId}`;
+}
+
 export async function fetchTimelinePosts(
   env: Env,
   accessToken: string | null,
@@ -265,6 +270,8 @@ export async function fetchTimelinePosts(
     listId?: string | null;
     keyword?: string | null;
     xUserId?: string | null;
+    /** Only return posts newer than this id (X since_id watermark). */
+    sinceId?: string | null;
   } = {},
 ): Promise<TimelineFetchResult> {
   // DEMO_POSTS only when app-level demo mode is on (no X_CLIENT_*).
@@ -283,7 +290,7 @@ export async function fetchTimelinePosts(
         // No X call — UI prompts to pick an owned list.
         return { posts: [] };
       }
-      const url = `${X_API_BASE}/lists/${opts.listId}/tweets?${TWEET_QUERY}`;
+      const url = `${X_API_BASE}/lists/${opts.listId}/tweets?${withSinceId(TWEET_QUERY, opts.sinceId)}`;
       return { posts: await mapTweetResponse(await xGet(url, accessToken)) };
     }
 
@@ -294,6 +301,7 @@ export async function fetchTimelinePosts(
           accessToken,
           `${opts.keyword} -is:retweet`,
           20,
+          opts.sinceId,
         ),
       };
     }
@@ -302,7 +310,7 @@ export async function fetchTimelinePosts(
 
     if (kind === "home") {
       // Authenticated reverse-chronological home timeline — not recent search.
-      const url = `${X_API_BASE}/users/${userId}/timelines/reverse_chronological?${TWEET_QUERY}`;
+      const url = `${X_API_BASE}/users/${userId}/timelines/reverse_chronological?${withSinceId(TWEET_QUERY, opts.sinceId)}`;
       try {
         return { posts: await mapTweetResponse(await xGet(url, accessToken)) };
       } catch (e) {
@@ -321,7 +329,7 @@ export async function fetchTimelinePosts(
       // MUST use the user Mentions timeline — never recentSearch("@me …").
       // "@me" is literal text match (posts containing "@me"/"@Me"), NOT
       // mentions of the connected account (e.g. @dreamandbuildit).
-      const url = `${X_API_BASE}/users/${userId}/mentions?${TWEET_QUERY}`;
+      const url = `${X_API_BASE}/users/${userId}/mentions?${withSinceId(TWEET_QUERY, opts.sinceId)}`;
       return { posts: await mapTweetResponse(await xGet(url, accessToken)) };
     }
   } catch (e) {
@@ -404,6 +412,7 @@ async function recentSearch(
   token: string,
   query: string,
   max = 20,
+  sinceId?: string | null,
 ): Promise<DeckPost[]> {
   const params = new URLSearchParams({
     query,
@@ -412,6 +421,9 @@ async function recentSearch(
     expansions: "author_id",
     "user.fields": "profile_image_url,name,username",
   });
+  if (sinceId && /^\d+$/.test(sinceId)) {
+    params.set("since_id", sinceId);
+  }
   const json = await xGet(
     `${X_API_BASE}/tweets/search/recent?${params}`,
     token,

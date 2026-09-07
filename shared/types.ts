@@ -4,6 +4,20 @@ export const PLAN_LIMITS = {
     name: "Starter",
     maxKeywords: 3,
     maxMentionsPerMonth: 1000,
+    /** Soft personal-use read budget (X pay-per-use COGS). */
+    maxReadsPerMonth: 500,
+  },
+  pro: {
+    name: "Pro",
+    maxKeywords: 10,
+    maxMentionsPerMonth: 5000,
+    maxReadsPerMonth: 5000,
+  },
+  scale: {
+    name: "Scale",
+    maxKeywords: 30,
+    maxMentionsPerMonth: 25000,
+    maxReadsPerMonth: 25000,
   },
 } as const;
 
@@ -82,10 +96,14 @@ export interface UsageStatus {
   plan: string;
   maxKeywords: number;
   maxMentionsPerMonth: number;
+  maxReadsPerMonth: number;
   keywordsUsed: number;
   mentionsUsed: number;
+  /** Approximate X post reads this period (incremented on live fetches). */
+  readsUsed: number;
   period: string;
   capped: boolean;
+  readsCapped: boolean;
 }
 
 export interface SessionUser {

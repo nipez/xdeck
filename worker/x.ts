@@ -244,63 +244,159 @@ export type TimelineFetchResult = {
   error?: string;
 };
 
+const TWEET_QUERY =
+  "max_results=20&tweet.fields=created_at,public_metrics,author_id&expansions=author_id&user.fields=profile_image_url,name,username";
+
+/** Demo / placeholder list ids must never be sent to the live X API. */
+export function isPlaceholderListId(listId: string | null | undefined): boolean {
+  if (!listId) return true;
+  return (
+    listId.startsWith("demo-list-") ||
+    listId === "Founders" ||
+    !/^\d+$/.test(listId)
+  );
+}
+
 export async function fetchTimelinePosts(
   env: Env,
-  _accessToken: string | null,
+  accessToken: string | null,
   kind: "home" | "mentions" | "list" | "keyword",
-  opts: { listId?: string | null; keyword?: string | null } = {},
+  opts: {
+    listId?: string | null;
+    keyword?: string | null;
+    xUserId?: string | null;
+  } = {},
 ): Promise<TimelineFetchResult> {
   // DEMO_POSTS only when app-level demo mode is on (no X_CLIENT_*).
   if (isDemoMode(env)) {
     return { posts: filterDemo(kind, opts) };
   }
 
-  if (!_accessToken) {
+  if (!accessToken) {
     return { posts: [] };
   }
 
   // Live X API — never silently fall back to DEMO_POSTS on error.
   try {
-    if (kind === "home") {
-      // Reverse chrono home requires elevated access; v0 uses recent search as stand-in.
-      return {
-        posts: await recentSearch(env, _accessToken, "lang:en -is:retweet", 20),
-      };
+    if (kind === "list") {
+      if (isPlaceholderListId(opts.listId)) {
+        // No X call — UI prompts to pick an owned list.
+        return { posts: [] };
+      }
+      const url = `${X_API_BASE}/lists/${opts.listId}/tweets?${TWEET_QUERY}`;
+      return { posts: await mapTweetResponse(await xGet(url, accessToken)) };
     }
-    if (kind === "mentions") {
-      return {
-        posts: await recentSearch(env, _accessToken, "@me -is:retweet", 20),
-      };
-    }
-    if (kind === "list" && opts.listId) {
-      const url = `${X_API_BASE}/lists/${opts.listId}/tweets?max_results=20&tweet.fields=created_at,public_metrics&expansions=author_id&user.fields=profile_image_url,name,username`;
-      return { posts: await mapTweetResponse(await xGet(url, _accessToken)) };
-    }
+
     if (kind === "keyword" && opts.keyword) {
       return {
         posts: await recentSearch(
           env,
-          _accessToken,
+          accessToken,
           `${opts.keyword} -is:retweet`,
           20,
         ),
       };
     }
+
+    const userId = await resolveXUserId(accessToken, opts.xUserId);
+
+    if (kind === "home") {
+      // Authenticated reverse-chronological home timeline — not recent search.
+      const url = `${X_API_BASE}/users/${userId}/timelines/reverse_chronological?${TWEET_QUERY}`;
+      try {
+        return { posts: await mapTweetResponse(await xGet(url, accessToken)) };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/X API (403|402)/.test(msg) || /not.?entitled|client-forbidden|usage/i.test(msg)) {
+          return {
+            posts: [],
+            error: `Home timeline unavailable (${msg}). This endpoint needs tweet.read on the connected user; if your X app plan does not include reverse_chronological, reconnect or upgrade access.`,
+          };
+        }
+        throw e;
+      }
+    }
+
+    if (kind === "mentions") {
+      // MUST use the user Mentions timeline — never recentSearch("@me …").
+      // "@me" is literal text match (posts containing "@me"/"@Me"), NOT
+      // mentions of the connected account (e.g. @dreamandbuildit).
+      const url = `${X_API_BASE}/users/${userId}/mentions?${TWEET_QUERY}`;
+      return { posts: await mapTweetResponse(await xGet(url, accessToken)) };
+    }
   } catch (e) {
-    return {
-      posts: [],
-      error: e instanceof Error ? e.message : "Failed to fetch from X",
-    };
+    const msg = e instanceof Error ? e.message : "Failed to fetch from X";
+    console.error(`[xdeck] fetchTimelinePosts ${kind}:`, msg);
+    return { posts: [], error: msg };
   }
   return { posts: [] };
+}
+
+/** Prefer stored x_user_id; fall back to GET /2/users/me. */
+async function resolveXUserId(
+  accessToken: string,
+  storedId?: string | null,
+): Promise<string> {
+  if (storedId && /^\d+$/.test(storedId)) return storedId;
+  const me = (await xGet(`${X_API_BASE}/users/me`, accessToken)) as {
+    data: { id: string };
+  };
+  return me.data.id;
 }
 
 async function xGet(url: string, token: string) {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(`X API ${res.status}`);
+  if (!res.ok) {
+    const raw = await res.text().catch(() => "");
+    const detail = summarizeXApiError(raw);
+    // Log status + short detail only — never the bearer token or full secrets.
+    console.error(
+      `[xdeck] X API ${res.status} ${safeUrlForLog(url)}${detail ? ` — ${detail}` : ""}`,
+    );
+    throw new Error(detail ? `X API ${res.status}: ${detail}` : `X API ${res.status}`);
+  }
   return res.json();
+}
+
+/** Strip query values that might be sensitive; keep path for debugging. */
+function safeUrlForLog(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.pathname;
+  } catch {
+    return url.split("?")[0] ?? url;
+  }
+}
+
+/** Short, non-secret snippet from an X error body for UI/logs. */
+function summarizeXApiError(raw: string): string {
+  if (!raw) return "";
+  const cleaned = raw.replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "[redacted]");
+  try {
+    const json = JSON.parse(cleaned) as {
+      title?: string;
+      detail?: string;
+      type?: string;
+      errors?: Array<{ message?: string; title?: string; detail?: string }>;
+      reason?: string;
+    };
+    const parts: string[] = [];
+    if (json.title) parts.push(json.title);
+    if (json.detail) parts.push(json.detail);
+    if (json.reason) parts.push(json.reason);
+    if (json.errors?.length) {
+      for (const err of json.errors.slice(0, 2)) {
+        const bit = err.message || err.detail || err.title;
+        if (bit) parts.push(bit);
+      }
+    }
+    const joined = parts.filter(Boolean).join(" — ");
+    return joined.slice(0, 180);
+  } catch {
+    return cleaned.replace(/\s+/g, " ").trim().slice(0, 120);
+  }
 }
 
 async function recentSearch(
@@ -406,6 +502,7 @@ export type ListsFetchResult = {
 export async function fetchUserLists(
   env: Env,
   accessToken: string | null,
+  xUserId?: string | null,
 ): Promise<ListsFetchResult> {
   if (isDemoMode(env)) {
     return { lists: DEMO_LISTS, demo: true };
@@ -414,11 +511,9 @@ export async function fetchUserLists(
     return { lists: [], demo: false };
   }
   try {
-    const me = (await xGet(`${X_API_BASE}/users/me`, accessToken)) as {
-      data: { id: string };
-    };
+    const userId = await resolveXUserId(accessToken, xUserId);
     const json = (await xGet(
-      `${X_API_BASE}/users/${me.data.id}/owned_lists?max_results=100&list.fields=name`,
+      `${X_API_BASE}/users/${userId}/owned_lists?max_results=100&list.fields=name`,
       accessToken,
     )) as {
       data?: Array<{ id: string; name: string }>;
@@ -428,10 +523,8 @@ export async function fetchUserLists(
       demo: false,
     };
   } catch (e) {
-    return {
-      lists: [],
-      demo: false,
-      error: e instanceof Error ? e.message : "Failed to fetch lists from X",
-    };
+    const msg = e instanceof Error ? e.message : "Failed to fetch lists from X";
+    console.error("[xdeck] fetchUserLists:", msg);
+    return { lists: [], demo: false, error: msg };
   }
 }

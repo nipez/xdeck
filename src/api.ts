@@ -95,6 +95,8 @@ export const api = {
       listsDemo?: boolean;
       needsXAccount?: boolean;
       error?: string;
+      /** Effective list id after server clears stale demo/invalid ids */
+      listId?: string | null;
     }>(`/api/columns/${id}/feed`),
 
   keywords: () =>

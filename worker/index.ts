@@ -20,6 +20,7 @@ import {
   fetchTimelinePosts,
   fetchUserLists,
   finishXOAuth,
+  isPlaceholderListId,
   startXOAuth,
 } from "./x";
 
@@ -339,6 +340,7 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
     if (posts.length === 0) {
       const live = await fetchTimelinePosts(c.env, resolved.token, "keyword", {
         keyword: keywordPhrase || "xdeck",
+        xUserId: resolved.xUserId,
       });
       posts = live.posts;
       feedError = live.error;
@@ -354,23 +356,48 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
     });
   }
 
-  const live = await fetchTimelinePosts(c.env, resolved.token, col.type, {
-    listId: col.list_id,
-  });
-
+  let listId = col.list_id;
   let lists:
     | { lists: Array<{ id: string; name: string }>; demo: boolean; error?: string }
     | undefined;
+
   if (col.type === "list") {
-    lists = await fetchUserLists(c.env, resolved.token);
+    lists = await fetchUserLists(c.env, resolved.token, resolved.xUserId);
+
+    // Drop stale demo / non-numeric list ids in live mode so we never hit X with them.
+    const ownedIds = new Set((lists.lists ?? []).map((l) => l.id));
+    if (
+      listId &&
+      !isDemoMode(c.env) &&
+      (isPlaceholderListId(listId) ||
+        (ownedIds.size > 0 && !ownedIds.has(listId)))
+    ) {
+      await c.env.DB.prepare(
+        `UPDATE columns SET list_id = NULL, title = CASE
+           WHEN title LIKE '☰ %' THEN 'Lists'
+           ELSE title
+         END, updated_at = datetime('now')
+         WHERE id = ? AND user_id = ?`,
+      )
+        .bind(col.id, user.id)
+        .run();
+      listId = null;
+    }
   }
+
+  const live = await fetchTimelinePosts(c.env, resolved.token, col.type, {
+    listId,
+    xUserId: resolved.xUserId,
+  });
 
   return c.json({
     posts: live.posts,
     needsXAccount: resolved.needsXAccount,
-    error: live.error ?? lists?.error,
+    // Prefer timeline error; list catalog errors shouldn't mask "Select a list".
+    error: live.error ?? (col.type === "list" && listId ? lists?.error : undefined),
     lists: lists?.lists,
     listsDemo: lists?.demo,
+    listId,
   });
 });
 
@@ -454,7 +481,11 @@ app.post("/api/keywords/poll", requireAuth, async (c) => {
 app.get("/api/lists", requireAuth, async (c) => {
   const user = c.get("user")!;
   const resolved = await resolveAccountToken(c.env, user.id, null);
-  const result = await fetchUserLists(c.env, resolved.token);
+  const result = await fetchUserLists(
+    c.env,
+    resolved.token,
+    resolved.xUserId,
+  );
   return c.json({
     lists: result.lists,
     demo: result.demo,
@@ -485,10 +516,16 @@ async function resolveAccountToken(
 ): Promise<{
   token: string | null;
   accountId: string | null;
+  xUserId: string | null;
   needsXAccount: boolean;
 }> {
   if (isDemoMode(env)) {
-    return { token: null, accountId: xAccountId, needsXAccount: false };
+    return {
+      token: null,
+      accountId: xAccountId,
+      xUserId: null,
+      needsXAccount: false,
+    };
   }
 
   let accountId = xAccountId;
@@ -502,28 +539,44 @@ async function resolveAccountToken(
   }
 
   if (!accountId) {
-    return { token: null, accountId: null, needsXAccount: true };
+    return {
+      token: null,
+      accountId: null,
+      xUserId: null,
+      needsXAccount: true,
+    };
   }
 
   const row = await env.DB.prepare(
-    `SELECT access_token_enc FROM x_accounts WHERE id = ? AND user_id = ?`,
+    `SELECT access_token_enc, x_user_id FROM x_accounts WHERE id = ? AND user_id = ?`,
   )
     .bind(accountId, userId)
-    .first<{ access_token_enc: string }>();
+    .first<{ access_token_enc: string; x_user_id: string }>();
 
   if (!row) {
-    return { token: null, accountId: null, needsXAccount: true };
+    return {
+      token: null,
+      accountId: null,
+      xUserId: null,
+      needsXAccount: true,
+    };
   }
 
   try {
     return {
       token: await decryptSecret(row.access_token_enc, env.TOKEN_ENCRYPTION_KEY),
       accountId,
+      xUserId: row.x_user_id,
       needsXAccount: false,
     };
   } catch {
     // Corrupt / undecryptable token — treat as missing rather than 500 the feed.
-    return { token: null, accountId, needsXAccount: true };
+    return {
+      token: null,
+      accountId,
+      xUserId: row.x_user_id,
+      needsXAccount: true,
+    };
   }
 }
 

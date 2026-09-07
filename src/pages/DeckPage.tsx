@@ -156,6 +156,7 @@ export function DeckPage() {
                 await api.patchColumn(col.id, { list_id: listId, title });
                 await load();
               }}
+              onColumnMetaChange={load}
             />
           ))}
           {columns.length === 0 && (

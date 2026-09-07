@@ -112,6 +112,9 @@ Also in `wrangler.toml` `[vars]`: `APP_NAME`, `PLAN_NAME`.
 1. Email magic-link / demo auth (Workers-friendly; secrets via env)
 2. X OAuth 2.0 + PKCE; tokens encrypted in D1; multiple accounts per user
 3. Horizontal multi-column deck: Home, Mentions, Lists, Keyword
+   - Home: `GET /2/users/:id/timelines/reverse_chronological`
+   - Mentions: `GET /2/users/:id/mentions`
+   - Lists: owned lists only; missing/invalid `list_id` skips the X tweets call
 4. Add / remove / reorder columns; layout persisted in D1
 5. Keyword brand-listen with Starter caps (3 keywords, 1,000 mentions/month); pause UI when capped
 6. Cron every 5 minutes + on-demand poll; timeline columns client-refresh
@@ -124,8 +127,7 @@ Also in `wrangler.toml` `[vars]`: `APP_NAME`, `PLAN_NAME`.
 - Posting or replying inside the app (reply deep-links to x.com)  
 - Stripe / billing (limits are code constants)  
 - Native mobile apps  
-- Enterprise firehose / filtered stream (recent search + polling only)
-- Full reverse-chronological home timeline (v0 uses recent search as a stand-in when home access is restricted)
+- Enterprise firehose / filtered stream (keywords use recent search + polling)
 - Following/subscribed lists beyond owned lists (owned lists only for v0)
 
 ## D1 migrations

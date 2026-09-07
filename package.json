@@ -13,6 +13,7 @@
     "db:migrate:local": "wrangler d1 migrations apply xdeck-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply xdeck-db --remote",
     "typecheck": "tsc --noEmit",
+    "test:routes": "node scripts/assert-timeline-routes.mjs",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {

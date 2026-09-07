@@ -139,6 +139,8 @@ export async function finishXOAuth(
     .bind(row.user_id, meJson.data.id)
     .first<{ id: string }>();
 
+  const accountId = existing?.id ?? randomId();
+
   if (existing) {
     await env.DB.prepare(
       `UPDATE x_accounts SET username = ?, display_name = ?, avatar_url = ?,
@@ -153,7 +155,7 @@ export async function finishXOAuth(
         refreshEnc,
         expiresAt,
         tokens.scope ?? null,
-        existing.id,
+        accountId,
       )
       .run();
   } else {
@@ -163,7 +165,7 @@ export async function finishXOAuth(
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
-        randomId(),
+        accountId,
         row.user_id,
         meJson.data.id,
         meJson.data.username,
@@ -177,7 +179,24 @@ export async function finishXOAuth(
       .run();
   }
 
+  // Seeded columns start with x_account_id NULL — bind them so feeds use this token.
+  await bindUnboundColumns(env, row.user_id, accountId);
+
   return { ok: true, username: meJson.data.username };
+}
+
+/** Attach an X account to any of the user's columns that still lack one. */
+export async function bindUnboundColumns(
+  env: Env,
+  userId: string,
+  xAccountId: string,
+) {
+  await env.DB.prepare(
+    `UPDATE columns SET x_account_id = ?, updated_at = datetime('now')
+     WHERE user_id = ? AND x_account_id IS NULL`,
+  )
+    .bind(xAccountId, userId)
+    .run();
 }
 
 /** Connect a fake X account in demo mode for UI testing. */
@@ -190,10 +209,14 @@ export async function connectDemoAccount(
     `SELECT id FROM x_accounts WHERE user_id = ? AND x_user_id = ?`,
   )
     .bind(userId, "demo-x-1")
-    .first();
+    .first<{ id: string }>();
 
-  if (existing) return;
+  if (existing) {
+    await bindUnboundColumns(env, userId, existing.id);
+    return;
+  }
 
+  const accountId = randomId();
   const enc = await encryptSecret("demo-token", env.TOKEN_ENCRYPTION_KEY);
   await env.DB.prepare(
     `INSERT INTO x_accounts
@@ -201,7 +224,7 @@ export async function connectDemoAccount(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
-      randomId(),
+      accountId,
       userId,
       "demo-x-1",
       username,
@@ -212,44 +235,64 @@ export async function connectDemoAccount(
       "tweet.read users.read offline.access list.read",
     )
     .run();
+
+  await bindUnboundColumns(env, userId, accountId);
 }
+
+export type TimelineFetchResult = {
+  posts: DeckPost[];
+  error?: string;
+};
 
 export async function fetchTimelinePosts(
   env: Env,
   _accessToken: string | null,
   kind: "home" | "mentions" | "list" | "keyword",
   opts: { listId?: string | null; keyword?: string | null } = {},
-): Promise<DeckPost[]> {
-  if (isDemoMode(env) || !_accessToken) {
-    return filterDemo(kind, opts);
+): Promise<TimelineFetchResult> {
+  // DEMO_POSTS only when app-level demo mode is on (no X_CLIENT_*).
+  if (isDemoMode(env)) {
+    return { posts: filterDemo(kind, opts) };
   }
 
-  // Live X API paths — best-effort; fall back to empty on error
+  if (!_accessToken) {
+    return { posts: [] };
+  }
+
+  // Live X API — never silently fall back to DEMO_POSTS on error.
   try {
     if (kind === "home") {
-      // Reverse chrono home requires user context; use bookmarks/timeline when available
-      // For v0 we use recent search as a pragmatic stand-in if home is restricted
-      return await recentSearch(env, _accessToken, "lang:en -is:retweet", 20);
+      // Reverse chrono home requires elevated access; v0 uses recent search as stand-in.
+      return {
+        posts: await recentSearch(env, _accessToken, "lang:en -is:retweet", 20),
+      };
     }
     if (kind === "mentions") {
-      return await recentSearch(env, _accessToken, "@me -is:retweet", 20);
+      return {
+        posts: await recentSearch(env, _accessToken, "@me -is:retweet", 20),
+      };
     }
     if (kind === "list" && opts.listId) {
       const url = `${X_API_BASE}/lists/${opts.listId}/tweets?max_results=20&tweet.fields=created_at,public_metrics&expansions=author_id&user.fields=profile_image_url,name,username`;
-      return await mapTweetResponse(await xGet(url, _accessToken));
+      return { posts: await mapTweetResponse(await xGet(url, _accessToken)) };
     }
     if (kind === "keyword" && opts.keyword) {
-      return await recentSearch(
-        env,
-        _accessToken,
-        `${opts.keyword} -is:retweet`,
-        20,
-      );
+      return {
+        posts: await recentSearch(
+          env,
+          _accessToken,
+          `${opts.keyword} -is:retweet`,
+          20,
+        ),
+      };
     }
-  } catch {
-    return filterDemo(kind, opts);
+  } catch (e) {
+    return {
+      posts: [],
+      error: e instanceof Error ? e.message : "Failed to fetch from X",
+    };
   }
-  return [];
+  return { posts: [] };
 }
 
 async function xGet(url: string, token: string) {
@@ -351,4 +394,44 @@ function filterDemo(
 
 export function demoLists() {
   return DEMO_LISTS;
+}
+
+export type ListsFetchResult = {
+  lists: Array<{ id: string; name: string }>;
+  demo: boolean;
+  error?: string;
+};
+
+/** Owned lists for the connected account. Demo lists only when isDemoMode. */
+export async function fetchUserLists(
+  env: Env,
+  accessToken: string | null,
+): Promise<ListsFetchResult> {
+  if (isDemoMode(env)) {
+    return { lists: DEMO_LISTS, demo: true };
+  }
+  if (!accessToken) {
+    return { lists: [], demo: false };
+  }
+  try {
+    const me = (await xGet(`${X_API_BASE}/users/me`, accessToken)) as {
+      data: { id: string };
+    };
+    const json = (await xGet(
+      `${X_API_BASE}/users/${me.data.id}/owned_lists?max_results=100&list.fields=name`,
+      accessToken,
+    )) as {
+      data?: Array<{ id: string; name: string }>;
+    };
+    return {
+      lists: (json.data ?? []).map((l) => ({ id: l.id, name: l.name })),
+      demo: false,
+    };
+  } catch (e) {
+    return {
+      lists: [],
+      demo: false,
+      error: e instanceof Error ? e.message : "Failed to fetch lists from X",
+    };
+  }
 }

@@ -92,6 +92,9 @@ export const api = {
       keyword?: string | null;
       capped?: boolean;
       lists?: Array<{ id: string; name: string }>;
+      listsDemo?: boolean;
+      needsXAccount?: boolean;
+      error?: string;
     }>(`/api/columns/${id}/feed`),
 
   keywords: () =>
@@ -118,5 +121,10 @@ export const api = {
     ),
 
   lists: () =>
-    request<{ lists: Array<{ id: string; name: string }> }>("/api/lists"),
+    request<{
+      lists: Array<{ id: string; name: string }>;
+      demo?: boolean;
+      needsXAccount?: boolean;
+      error?: string;
+    }>("/api/lists"),
 };

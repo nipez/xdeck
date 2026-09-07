@@ -31,12 +31,13 @@ export function DeckPage() {
       setToast(`Connected @${q.get("x_connected")}`);
       window.history.replaceState({}, "", "/app");
       refresh();
+      load().catch(() => {});
     }
     if (q.get("x_error")) {
       setToast(`X connect error: ${q.get("x_error")}`);
       window.history.replaceState({}, "", "/app");
     }
-  }, [refresh]);
+  }, [refresh, load]);
 
   async function addColumn(type: string) {
     setBusy(true);
@@ -136,7 +137,7 @@ export function DeckPage() {
         <div className="columns-scroller">
           {columns.map((col, i) => (
             <Column
-              key={col.id}
+              key={`${col.id}-${col.x_account_id ?? "none"}`}
               column={col}
               keywords={keywords}
               onRemove={() => removeColumn(col.id)}

@@ -318,6 +318,9 @@ export async function fetchTimelinePosts(
     }
 
     if (kind === "mentions") {
+      // MUST use the user Mentions timeline — never recentSearch("@me …").
+      // "@me" is literal text match (posts containing "@me"/"@Me"), NOT
+      // mentions of the connected account (e.g. @dreamandbuildit).
       const url = `${X_API_BASE}/users/${userId}/mentions?${TWEET_QUERY}`;
       return { posts: await mapTweetResponse(await xGet(url, accessToken)) };
     }

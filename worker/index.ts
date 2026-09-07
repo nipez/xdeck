@@ -354,7 +354,10 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
         sinceId: forceRefresh && posts.length > 0 ? sinceId : null,
       });
       if (live.posts.length > 0) {
-        await incrementReads(c.env, user.id, live.posts.length);
+        const liveReads = live.posts.filter((p) => p.source === "live").length;
+        if (liveReads > 0) {
+          await incrementReads(c.env, user.id, liveReads);
+        }
         posts = mergeFeedPosts(live.posts, posts);
         fromCache = false;
       }
@@ -426,7 +429,10 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
 
   let posts = live.posts;
   if (live.posts.length > 0) {
-    await incrementReads(c.env, user.id, live.posts.length);
+    const liveReads = live.posts.filter((p) => p.source === "live").length;
+    if (liveReads > 0) {
+      await incrementReads(c.env, user.id, liveReads);
+    }
     posts = mergeFeedPosts(live.posts, cached?.posts ?? []);
     await writeFeedCache(c.env, col.id, user.id, posts);
   } else if (cached?.posts.length) {
@@ -449,7 +455,12 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
     listsDemo: lists?.demo,
     listId,
     cached: posts.length > 0 && live.posts.length === 0,
-    source: live.posts.length > 0 ? "live" : "cache",
+    source:
+      live.posts.length > 0
+        ? (live.posts[0]?.source ?? "live")
+        : posts.length > 0
+          ? "cache"
+          : "live",
     usage: await getUsage(c.env, user.id),
   });
 });

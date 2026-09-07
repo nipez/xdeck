@@ -364,12 +364,13 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
   if (col.type === "list") {
     lists = await fetchUserLists(c.env, resolved.token, resolved.xUserId);
 
-    // Drop stale demo / non-numeric list ids so we never hit X with them.
+    // Drop stale demo / non-numeric list ids in live mode so we never hit X with them.
     const ownedIds = new Set((lists.lists ?? []).map((l) => l.id));
     if (
       listId &&
+      !isDemoMode(c.env) &&
       (isPlaceholderListId(listId) ||
-        (!isDemoMode(c.env) && ownedIds.size > 0 && !ownedIds.has(listId)))
+        (ownedIds.size > 0 && !ownedIds.has(listId)))
     ) {
       await c.env.DB.prepare(
         `UPDATE columns SET list_id = NULL, title = CASE

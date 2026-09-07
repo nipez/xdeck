@@ -515,11 +515,16 @@ async function resolveAccountToken(
     return { token: null, accountId: null, needsXAccount: true };
   }
 
-  return {
-    token: await decryptSecret(row.access_token_enc, env.TOKEN_ENCRYPTION_KEY),
-    accountId,
-    needsXAccount: false,
-  };
+  try {
+    return {
+      token: await decryptSecret(row.access_token_enc, env.TOKEN_ENCRYPTION_KEY),
+      accountId,
+      needsXAccount: false,
+    };
+  } catch {
+    // Corrupt / undecryptable token — treat as missing rather than 500 the feed.
+    return { token: null, accountId, needsXAccount: true };
+  }
 }
 
 export default {

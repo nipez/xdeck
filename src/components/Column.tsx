@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DeckColumn, DeckPost, Keyword } from "@shared/types";
 import { api } from "../api";
 import { PostCard } from "./PostCard";
@@ -13,6 +13,7 @@ export function Column({
   canMoveRight,
   onBindKeyword,
   onBindList,
+  onColumnMetaChange,
 }: {
   column: DeckColumn;
   keywords: Keyword[];
@@ -23,6 +24,8 @@ export function Column({
   canMoveRight: boolean;
   onBindKeyword: (keywordId: string, title: string) => Promise<void>;
   onBindList: (listId: string, title: string) => Promise<void>;
+  /** Called when the server clears stale column metadata (e.g. demo list_id). */
+  onColumnMetaChange?: () => void;
 }) {
   const [posts, setPosts] = useState<DeckPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +33,13 @@ export function Column({
   const [lists, setLists] = useState<Array<{ id: string; name: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [needsXAccount, setNeedsXAccount] = useState(false);
+  const metaChangeRef = useRef(onColumnMetaChange);
+  metaChangeRef.current = onColumnMetaChange;
+
+  const selectedListId =
+    column.list_id && lists.some((l) => l.id === column.list_id)
+      ? column.list_id
+      : "";
 
   const loadFeed = useCallback(async () => {
     setLoading(true);
@@ -43,12 +53,20 @@ export function Column({
       if (data.error && data.posts.length === 0) {
         setError(data.error);
       }
+      // Server may clear invalid/demo list_id — refresh column row so title/dropdown match.
+      if (
+        column.type === "list" &&
+        "listId" in data &&
+        data.listId !== column.list_id
+      ) {
+        metaChangeRef.current?.();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
       setLoading(false);
     }
-  }, [column.id]);
+  }, [column.id, column.type, column.list_id]);
 
   useEffect(() => {
     loadFeed();
@@ -119,7 +137,7 @@ export function Column({
       {column.type === "list" && (
         <div className="col-toolbar">
           <select
-            value={column.list_id ?? ""}
+            value={selectedListId}
             onChange={(e) => {
               const list = lists.find((l) => l.id === e.target.value);
               if (list) onBindList(list.id, `☰ ${list.name}`);
@@ -164,7 +182,7 @@ export function Column({
           <div className="col-empty pad">
             <p className="col-empty-title">No posts</p>
             <p className="muted">
-              {column.type === "list" && !column.list_id
+              {column.type === "list" && !selectedListId
                 ? "Select a list above to load posts."
                 : "Nothing to show right now."}
             </p>

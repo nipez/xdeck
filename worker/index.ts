@@ -115,10 +115,12 @@ app.get("/api/x/accounts", requireAuth, async (c) => {
 app.post("/api/x/connect", requireAuth, async (c) => {
   const user = c.get("user")!;
   if (isDemoMode(c.env)) {
-    await connectDemoAccount(c.env, user.id);
+    const demo = await connectDemoAccount(c.env, user.id);
     return c.json({
       demo: true,
-      message: "Demo account connected. Set X_CLIENT_ID / X_CLIENT_SECRET for real OAuth.",
+      message: demo.created
+        ? `Demo account @${demo.username} connected. Set X_CLIENT_ID / X_CLIENT_SECRET for real OAuth.`
+        : `Demo account @${demo.username} already connected.`,
     });
   }
   const result = await startXOAuth(c.env, user.id);
@@ -544,7 +546,8 @@ app.post("/api/keywords/poll", requireAuth, async (c) => {
 
 app.get("/api/lists", requireAuth, async (c) => {
   const user = c.get("user")!;
-  const resolved = await resolveAccountToken(c.env, user.id, null);
+  const xAccountId = c.req.query("x_account_id") || null;
+  const resolved = await resolveAccountToken(c.env, user.id, xAccountId);
   const result = await fetchUserLists(
     c.env,
     resolved.token,

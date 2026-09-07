@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DeckColumn, DeckPost, Keyword } from "@shared/types";
+import type { DeckColumn, DeckPost, Keyword, XAccount } from "@shared/types";
 import { PERSONAL_MODE } from "@shared/constants";
 import { api } from "../api";
 import { PostCard } from "./PostCard";
@@ -7,6 +7,7 @@ import { PostCard } from "./PostCard";
 export function Column({
   column,
   keywords,
+  accounts,
   onRemove,
   onMoveLeft,
   onMoveRight,
@@ -14,11 +15,13 @@ export function Column({
   canMoveRight,
   onBindKeyword,
   onBindList,
+  onBindAccount,
   onColumnMetaChange,
   onUsageMaybeChanged,
 }: {
   column: DeckColumn;
   keywords: Keyword[];
+  accounts: XAccount[];
   onRemove: () => void;
   onMoveLeft: () => void;
   onMoveRight: () => void;
@@ -26,6 +29,7 @@ export function Column({
   canMoveRight: boolean;
   onBindKeyword: (keywordId: string, title: string) => Promise<void>;
   onBindList: (listId: string, title: string) => Promise<void>;
+  onBindAccount: (accountId: string) => Promise<void>;
   /** Called when the server clears stale column metadata (e.g. demo list_id). */
   onColumnMetaChange?: () => void;
   /** Called after a live feed fetch so the header can refresh read usage. */
@@ -84,6 +88,7 @@ export function Column({
 
   useEffect(() => {
     // Cheap personal default: load once on open. No sub-minute auto-poll.
+    // Remount (via DeckPage key) when x_account_id changes so the new account loads.
     loadFeed();
     const ms = PERSONAL_MODE.autoRefreshMs;
     if (ms <= 0) return;
@@ -92,10 +97,16 @@ export function Column({
   }, [loadFeed]);
 
   useEffect(() => {
-    if (column.type === "list" && lists.length === 0) {
-      api.lists().then((r) => setLists(r.lists)).catch(() => {});
-    }
-  }, [column.type, lists.length]);
+    if (column.type !== "list") return;
+    setLists([]);
+    api
+      .lists(column.x_account_id)
+      .then((r) => setLists(r.lists))
+      .catch(() => {});
+  }, [column.type, column.x_account_id]);
+
+  const boundAccount =
+    accounts.find((a) => a.id === column.x_account_id) ?? null;
 
   return (
     <section className="deck-column">
@@ -138,6 +149,36 @@ export function Column({
           </button>
         </div>
       </header>
+
+      {accounts.length > 0 && (
+        <div className="col-toolbar">
+          <label className="col-acct-label" htmlFor={`col-acct-${column.id}`}>
+            Account
+          </label>
+          <select
+            id={`col-acct-${column.id}`}
+            value={column.x_account_id ?? ""}
+            title={
+              boundAccount
+                ? `@${boundAccount.username}`
+                : "Select X account for this column"
+            }
+            onChange={(e) => {
+              const id = e.target.value;
+              if (id) onBindAccount(id);
+            }}
+          >
+            {!column.x_account_id && (
+              <option value="">Select account…</option>
+            )}
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                @{a.username}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {column.type === "keyword" && (
         <div className="col-toolbar">

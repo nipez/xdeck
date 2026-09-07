@@ -204,20 +204,51 @@ export async function connectDemoAccount(
   env: Env,
   userId: string,
   username = "demo_user",
-) {
+): Promise<{ username: string; created: boolean }> {
   const existing = await env.DB.prepare(
-    `SELECT id FROM x_accounts WHERE user_id = ? AND x_user_id = ?`,
+    `SELECT id, x_user_id, username FROM x_accounts WHERE user_id = ? ORDER BY created_at ASC`,
   )
-    .bind(userId, "demo-x-1")
-    .first<{ id: string }>();
+    .bind(userId)
+    .all<{ id: string; x_user_id: string; username: string }>();
+  const accounts = existing.results ?? [];
 
-  if (existing) {
-    await bindUnboundColumns(env, userId, existing.id);
-    return;
+  // First account: primary demo user (idempotent).
+  if (accounts.length === 0) {
+    const accountId = randomId();
+    const enc = await encryptSecret("demo-token", env.TOKEN_ENCRYPTION_KEY);
+    await env.DB.prepare(
+      `INSERT INTO x_accounts
+       (id, user_id, x_user_id, username, display_name, avatar_url, access_token_enc, refresh_token_enc, scopes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        accountId,
+        userId,
+        "demo-x-1",
+        username,
+        "Demo Account",
+        null,
+        enc,
+        null,
+        "tweet.read users.read offline.access list.read",
+      )
+      .run();
+    await bindUnboundColumns(env, userId, accountId);
+    return { username, created: true };
   }
 
+  // Additional connects create extra demo accounts so multi-account UI is testable.
+  const n = accounts.length + 1;
+  const xUserId = `demo-x-${n}`;
+  const already = accounts.find((a) => a.x_user_id === xUserId);
+  if (already) {
+    await bindUnboundColumns(env, userId, already.id);
+    return { username: already.username, created: false };
+  }
+
+  const uname = `demo_user_${n}`;
   const accountId = randomId();
-  const enc = await encryptSecret("demo-token", env.TOKEN_ENCRYPTION_KEY);
+  const enc = await encryptSecret(`demo-token-${n}`, env.TOKEN_ENCRYPTION_KEY);
   await env.DB.prepare(
     `INSERT INTO x_accounts
      (id, user_id, x_user_id, username, display_name, avatar_url, access_token_enc, refresh_token_enc, scopes)
@@ -226,9 +257,9 @@ export async function connectDemoAccount(
     .bind(
       accountId,
       userId,
-      "demo-x-1",
-      username,
-      "Demo Account",
+      xUserId,
+      uname,
+      `Demo Account ${n}`,
       null,
       enc,
       null,
@@ -236,7 +267,7 @@ export async function connectDemoAccount(
     )
     .run();
 
-  await bindUnboundColumns(env, userId, accountId);
+  return { username: uname, created: true };
 }
 
 export type TimelineFetchResult = {

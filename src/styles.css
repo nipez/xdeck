@@ -711,11 +711,47 @@ select:focus {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
   margin-top: 0.45rem;
   font-size: 0.75rem;
 }
 
+/* Classic TweetDeck-style engagement row: icon + count */
+.post-metrics {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  max-width: 220px;
+  color: var(--text-dim);
+}
+
+.post-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  color: inherit;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.post-metric svg {
+  width: 1.05em;
+  height: 1.05em;
+  flex-shrink: 0;
+  opacity: 0.92;
+}
+
+.post-metric-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+}
+
 .reply-link {
+  flex-shrink: 0;
   color: var(--text-dim);
 }
 

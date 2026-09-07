@@ -430,6 +430,7 @@ function mapTweetResponse(json: unknown): DeckPost[] {
         like_count?: number;
         reply_count?: number;
         retweet_count?: number;
+        impression_count?: number;
       };
     }>;
     includes?: {
@@ -456,6 +457,7 @@ function mapTweetResponse(json: unknown): DeckPost[] {
       likeCount: t.public_metrics?.like_count,
       replyCount: t.public_metrics?.reply_count,
       repostCount: t.public_metrics?.retweet_count,
+      impressionCount: t.public_metrics?.impression_count,
       url: `https://x.com/${u?.username ?? "i"}/status/${t.id}`,
       source: "live" as const,
     };

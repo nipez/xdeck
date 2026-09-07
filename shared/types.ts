@@ -74,6 +74,8 @@ export interface DeckPost {
   likeCount?: number;
   replyCount?: number;
   repostCount?: number;
+  /** Views / impressions when X returns public_metrics.impression_count */
+  impressionCount?: number;
   url: string;
   source?: "live" | "demo" | "cache";
 }

@@ -4,8 +4,11 @@ export const PLAN_LIMITS = {
     name: "Starter",
     maxKeywords: 3,
     maxMentionsPerMonth: 1000,
-    /** Soft personal-use read budget (X pay-per-use COGS). */
-    maxReadsPerMonth: 500,
+    /**
+     * Soft personal/dev read budget (align with PERSONAL_READS_SOFT_CAP).
+     * High for solo testing; billed SaaS plans use pro/scale caps.
+     */
+    maxReadsPerMonth: 50_000,
   },
   pro: {
     name: "Pro",

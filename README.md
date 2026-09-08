@@ -122,7 +122,7 @@ Also in `wrangler.toml` `[vars]`: `APP_NAME`, `PLAN_NAME`.
 7. Keyword polling is **manual** (Poll now); background cron is off by default. Timeline columns are **manual refresh** + D1 cache-first (~6h TTL) to keep X COGS low
 8. Landing at `/`, deck at `/app`
 9. Lists column loads **owned lists** from the column’s bound X account when live (`list.read`); demo mode still uses sample list names
-10. Approximate X **read usage** in the deck header vs personal/Starter soft cap (~500 reads/month)
+10. Approximate X **read usage** in the deck header vs personal/Starter soft cap (~50,000 reads/month for solo testing)
 
 ## Out of scope (v0)
 
@@ -141,10 +141,10 @@ Migrations live in `migrations/`. `0001_init.sql` creates users, sessions, magic
 
 ```ts
 // shared/types.ts — PLAN_LIMITS
-Starter: maxKeywords = 3, maxMentionsPerMonth = 1000, maxReadsPerMonth = 500
+Starter: maxKeywords = 3, maxMentionsPerMonth = 1000, maxReadsPerMonth = 50000 (personal/dev soft cap)
 Pro / Scale: higher keyword, mention, and read caps (stubs for SaaS tiers)
 ```
 
-**Cheap personal mode** (default): columns load once on open and use a **manual refresh** button — no TweetDeck-style sub-minute auto-poll. Timeline feeds are **cache-first** (D1, ~6h TTL); live X calls use `since_id` when possible and increment a monthly **reads** counter (~500 soft cap for personal). **Background keyword cron is off** — use **Poll now** for explicit keyword search. Unbound keyword columns do not call X (`needsKeyword`). Starter caps (3 keywords / 1,000 mentions) stay hard-enforced.
+**Cheap personal mode** (default): columns load once on open and use a **manual refresh** button — no TweetDeck-style sub-minute auto-poll. Timeline feeds are **cache-first** (D1, ~6h TTL); live X calls use `since_id` when possible and increment a monthly **reads** counter (~50,000 soft cap for personal/dev testing). **Background keyword cron is off** — use **Poll now** for explicit keyword search. Unbound keyword columns do not call X (`needsKeyword`). Starter caps (3 keywords / 1,000 mentions) stay hard-enforced.
 
 No overages — when the monthly mention counter hits the cap, keyword polling skips that user and the UI shows a clear capped state.

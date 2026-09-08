@@ -41,6 +41,7 @@ export function Column({
   const [lists, setLists] = useState<Array<{ id: string; name: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [needsXAccount, setNeedsXAccount] = useState(false);
+  const [needsKeyword, setNeedsKeyword] = useState(false);
   const [fromCache, setFromCache] = useState(false);
   const metaChangeRef = useRef(onColumnMetaChange);
   metaChangeRef.current = onColumnMetaChange;
@@ -61,6 +62,7 @@ export function Column({
         setPosts(data.posts);
         setCapped(!!data.capped);
         setNeedsXAccount(!!data.needsXAccount);
+        setNeedsKeyword(!!data.needsKeyword);
         setFromCache(!!data.cached || data.source === "cache");
         if (data.lists) setLists(data.lists);
         if (data.error && data.posts.length === 0) {
@@ -237,13 +239,26 @@ export function Column({
             </p>
           </div>
         )}
-        {!needsXAccount && error && posts.length === 0 && (
+        {needsKeyword && !needsXAccount && !loading && (
+          <div className="col-empty pad">
+            <p className="col-empty-title">Select a keyword</p>
+            <p className="muted">
+              Bind a keyword above (or add one via Keywords). No X search runs
+              until a keyword is selected.
+            </p>
+          </div>
+        )}
+        {!needsXAccount && !needsKeyword && error && posts.length === 0 && (
           <div className="col-empty pad">
             <p className="col-empty-title">Couldn’t load posts</p>
             <p className="error-text">{error}</p>
           </div>
         )}
-        {!needsXAccount && !loading && posts.length === 0 && !error && (
+        {!needsXAccount &&
+          !needsKeyword &&
+          !loading &&
+          posts.length === 0 &&
+          !error && (
           <div className="col-empty pad">
             <p className="col-empty-title">No posts</p>
             <p className="muted">

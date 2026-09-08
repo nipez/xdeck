@@ -22,9 +22,10 @@ binding = "SESSIONS"
 id = "0c413cfc98f1490ab2860dd42c425fe2"
 preview_id = "0c413cfc98f1490ab2860dd42c425fe2"
 
-# Keyword / brand-listen polling every 5 minutes
-[triggers]
-crons = ["*/5 * * * *"]
+# Background keyword cron OFF — saves X API COGS for personal use.
+# Manual "Poll now" (/api/keywords/poll) still works. Re-enable when ready, e.g.:
+# [triggers]
+# crons = ["*/5 * * * *"]
 
 [vars]
 APP_NAME = "xdeck"

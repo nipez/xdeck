@@ -26,8 +26,11 @@ export const CRON_KEYWORD_LOOKBACK_MINUTES = 15;
 export const PERSONAL_MODE = {
   /** Soft monthly read budget for personal use (~$2.50 at $0.005/post). */
   softReadCap: 500,
-  /** Serve D1-cached timeline posts when fresher than this. */
-  feedCacheTtlMs: 5 * 60 * 1000,
+  /**
+   * Serve D1-cached timeline posts when fresher than this.
+   * Long TTL by default — prefer cache; hit X only on ?refresh=1 / column refresh.
+   */
+  feedCacheTtlMs: 6 * 60 * 60 * 1000,
   /**
    * Client auto-refresh interval. 0 = refresh-on-open + manual button only.
    * Opt-in slow polling: set to slowAutoRefreshMs (15 min).

@@ -31,8 +31,10 @@ export function resolveActiveAccount(
 /**
  * Rail-friendly handle: short names in full; longer names as @…last4
  * so truncation is obvious and the end of the handle stays recognizable.
+ * Do not also apply CSS text-overflow on this string (double truncation).
  */
 export function formatRailHandle(username: string, max = 6): string {
   if (username.length <= max) return `@${username}`;
-  return `@…${username.slice(-4)}`;
+  // U+2026 horizontal ellipsis — explicit truncation marker
+  return `@\u2026${username.slice(-4)}`;
 }

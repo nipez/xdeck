@@ -478,16 +478,16 @@ select:focus {
 }
 
 .rail-acct {
-  max-width: calc(var(--rail) - 8px);
-  padding: 0.15rem 0.2rem;
+  max-width: calc(var(--rail) - 6px);
+  padding: 0.15rem 0.15rem;
   border: 0;
   background: transparent;
   color: inherit;
-  font-size: 0.65rem;
+  font-size: 0.58rem;
   font-family: var(--mono);
   cursor: pointer;
   border-radius: 4px;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
 .rail-acct:hover {
@@ -497,8 +497,7 @@ select:focus {
 
 .rail-acct-text {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Handled by formatRailHandle — do not CSS-ellipsis again (double-truncation). */
   white-space: nowrap;
   text-align: center;
 }

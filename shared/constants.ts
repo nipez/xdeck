@@ -19,6 +19,26 @@ export const MAGIC_LINK_TTL_MINUTES = 15;
 
 export const CRON_KEYWORD_LOOKBACK_MINUTES = 15;
 
+/**
+ * Cheap personal mode — keep X pay-per-use COGS low.
+ * Classic TweetDeck-style sub-minute auto-refresh is intentionally off.
+ */
+export const PERSONAL_MODE = {
+  /** Soft monthly read budget for personal use (~$2.50 at $0.005/post). */
+  softReadCap: 500,
+  /** Serve D1-cached timeline posts when fresher than this. */
+  feedCacheTtlMs: 5 * 60 * 1000,
+  /**
+   * Client auto-refresh interval. 0 = refresh-on-open + manual button only.
+   * Opt-in slow polling: set to slowAutoRefreshMs (15 min).
+   */
+  autoRefreshMs: 0,
+  slowAutoRefreshMs: 15 * 60 * 1000,
+} as const;
+
+/** Alias used in docs / UI copy for the personal soft cap. */
+export const PERSONAL_READS_SOFT_CAP = PERSONAL_MODE.softReadCap;
+
 /** Sample posts for demo mode when X API credentials are missing. */
 export const DEMO_POSTS: DeckPost[] = [
   {

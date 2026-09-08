@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DeckColumn, DeckPost, Keyword } from "@shared/types";
+import { PERSONAL_MODE } from "@shared/constants";
 import { api } from "../api";
 import { PostCard } from "./PostCard";
 
@@ -14,6 +15,7 @@ export function Column({
   onBindKeyword,
   onBindList,
   onColumnMetaChange,
+  onUsageMaybeChanged,
 }: {
   column: DeckColumn;
   keywords: Keyword[];
@@ -26,6 +28,8 @@ export function Column({
   onBindList: (listId: string, title: string) => Promise<void>;
   /** Called when the server clears stale column metadata (e.g. demo list_id). */
   onColumnMetaChange?: () => void;
+  /** Called after a live feed fetch so the header can refresh read usage. */
+  onUsageMaybeChanged?: () => void;
 }) {
   const [posts, setPosts] = useState<DeckPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,48 +37,59 @@ export function Column({
   const [lists, setLists] = useState<Array<{ id: string; name: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [needsXAccount, setNeedsXAccount] = useState(false);
+  const [fromCache, setFromCache] = useState(false);
   const metaChangeRef = useRef(onColumnMetaChange);
   metaChangeRef.current = onColumnMetaChange;
+  const usageChangeRef = useRef(onUsageMaybeChanged);
+  usageChangeRef.current = onUsageMaybeChanged;
 
   const selectedListId =
     column.list_id && lists.some((l) => l.id === column.list_id)
       ? column.list_id
       : "";
 
-  const loadFeed = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.feed(column.id);
-      setPosts(data.posts);
-      setCapped(!!data.capped);
-      setNeedsXAccount(!!data.needsXAccount);
-      if (data.lists) setLists(data.lists);
-      if (data.error && data.posts.length === 0) {
-        setError(data.error);
+  const loadFeed = useCallback(
+    async (opts?: { force?: boolean }) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await api.feed(column.id, { refresh: !!opts?.force });
+        setPosts(data.posts);
+        setCapped(!!data.capped);
+        setNeedsXAccount(!!data.needsXAccount);
+        setFromCache(!!data.cached || data.source === "cache");
+        if (data.lists) setLists(data.lists);
+        if (data.error && data.posts.length === 0) {
+          setError(data.error);
+        }
+        // Server may clear invalid/demo list_id — refresh column row so title/dropdown match.
+        if (
+          column.type === "list" &&
+          "listId" in data &&
+          data.listId !== column.list_id
+        ) {
+          metaChangeRef.current?.();
+        }
+        if (data.source === "live" || opts?.force) {
+          usageChangeRef.current?.();
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        setLoading(false);
       }
-      // Server may clear invalid/demo list_id — refresh column row so title/dropdown match.
-      if (
-        column.type === "list" &&
-        "listId" in data &&
-        data.listId !== column.list_id
-      ) {
-        metaChangeRef.current?.();
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
-    } finally {
-      setLoading(false);
-    }
-  }, [column.id, column.type, column.list_id]);
+    },
+    [column.id, column.type, column.list_id],
+  );
 
   useEffect(() => {
+    // Cheap personal default: load once on open. No sub-minute auto-poll.
     loadFeed();
-    // Timeline columns: light client poll; keyword relies more on cron/cache
-    const ms = column.type === "keyword" ? 60_000 : 45_000;
-    const t = setInterval(loadFeed, ms);
+    const ms = PERSONAL_MODE.autoRefreshMs;
+    if (ms <= 0) return;
+    const t = setInterval(() => loadFeed(), ms);
     return () => clearInterval(t);
-  }, [loadFeed, column.type]);
+  }, [loadFeed]);
 
   useEffect(() => {
     if (column.type === "list" && lists.length === 0) {
@@ -88,6 +103,11 @@ export function Column({
         <div className="col-title-row">
           <h2 title={column.title}>{column.title}</h2>
           <span className="col-type">{column.type}</span>
+          {fromCache && posts.length > 0 && (
+            <span className="col-cache" title="Served from D1 cache">
+              cached
+            </span>
+          )}
         </div>
         <div className="col-actions">
           <button
@@ -106,7 +126,11 @@ export function Column({
           >
             →
           </button>
-          <button className="icon-btn" title="Refresh" onClick={loadFeed}>
+          <button
+            className="icon-btn"
+            title="Refresh from X"
+            onClick={() => loadFeed({ force: true })}
+          >
             ↻
           </button>
           <button className="icon-btn" title="Remove column" onClick={onRemove}>

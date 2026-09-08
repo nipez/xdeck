@@ -316,11 +316,25 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
       keywordPhrase = kw?.phrase ?? null;
     }
 
+    // No keyword bound — never fall back to searching "xdeck" (accidental reads).
+    if (!keywordPhrase) {
+      return c.json({
+        posts: [],
+        usage,
+        keyword: null,
+        capped: usage.capped,
+        needsXAccount: resolved.needsXAccount,
+        needsKeyword: true,
+        cached: false,
+        source: "cache",
+      });
+    }
+
     const mentions = await c.env.DB.prepare(
-      `SELECT * FROM mentions WHERE user_id = ? AND (? IS NULL OR keyword_id = ?)
+      `SELECT * FROM mentions WHERE user_id = ? AND keyword_id = ?
        ORDER BY posted_at DESC LIMIT 50`,
     )
-      .bind(user.id, col.keyword_id, col.keyword_id)
+      .bind(user.id, col.keyword_id)
       .all<{
         x_post_id: string;
         author_username: string | null;
@@ -347,11 +361,11 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
 
     let feedError: string | undefined;
     let fromCache = posts.length > 0;
-    // Live fetch only when empty or explicit refresh (cron fills cache otherwise).
+    // Live fetch only when empty or explicit refresh (manual Poll now fills mentions).
     if (posts.length === 0 || forceRefresh) {
       const sinceId = posts[0]?.id ?? null;
       const live = await fetchTimelinePosts(c.env, resolved.token, "keyword", {
-        keyword: keywordPhrase || "xdeck",
+        keyword: keywordPhrase,
         xUserId: resolved.xUserId,
         sinceId: forceRefresh && posts.length > 0 ? sinceId : null,
       });
@@ -372,6 +386,7 @@ app.get("/api/columns/:id/feed", requireAuth, async (c) => {
       keyword: keywordPhrase,
       capped: usage.capped,
       needsXAccount: resolved.needsXAccount,
+      needsKeyword: false,
       error: feedError,
       cached: fromCache,
       source: fromCache ? "cache" : posts[0]?.source ?? "live",
@@ -660,6 +675,8 @@ export default {
     return new Response("Not found", { status: 404 });
   },
 
+  // Cron trigger disabled in wrangler.toml — handler kept for optional re-enable.
+  // Manual Poll now uses POST /api/keywords/poll → pollAllKeywords.
   async scheduled(
     _controller: ScheduledController,
     env: Env,

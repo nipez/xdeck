@@ -95,6 +95,7 @@ export const api = {
       lists?: Array<{ id: string; name: string }>;
       listsDemo?: boolean;
       needsXAccount?: boolean;
+      needsKeyword?: boolean;
       error?: string;
       /** Effective list id after server clears stale demo/invalid ids */
       listId?: string | null;

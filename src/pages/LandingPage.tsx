@@ -59,8 +59,8 @@ export function LandingPage() {
             <span>Starter-plan caps: 3 keywords, 1,000 mentions/month — no surprise overages.</span>
           </li>
           <li>
-            <strong>Cron polling</strong>
-            <span>Keyword search on a slow cron; timelines are cache-first + manual refresh to keep X COGS low.</span>
+            <strong>Manual keyword poll</strong>
+            <span>Background cron is off; use Poll now when you want keyword search. Timelines stay cache-first + manual refresh to keep X COGS low.</span>
           </li>
         </ul>
       </section>

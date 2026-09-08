@@ -11,7 +11,7 @@ TweetDeck-style multi-column dashboard for **X** (Twitter), with keyword brand-l
 | Static hosting | Workers Assets (`[assets]` in `wrangler.toml`) — Pages-compatible deploy |
 | Database | Cloudflare **D1** (SQLite) |
 | Short-lived state | KV (`SESSIONS`) for OAuth state (also mirrored in D1) |
-| Scheduling | Worker **Cron Trigger** every 5 minutes → keyword recent-search poll |
+| Scheduling | Worker **Cron Trigger** — **disabled** by default (no background keyword polls). Manual **Poll now** still available. |
 
 ```
 Browser ──► Worker (Hono /api/* + SPA assets)
@@ -39,13 +39,14 @@ cp .dev.vars .dev.vars   # edit if needed — see Env vars below
 # Terminal A — Vite UI (proxies /api → Worker)
 npm run dev
 
-# Terminal B — Worker + D1 + cron locally
+# Terminal B — Worker + D1 locally (cron trigger disabled in wrangler.toml)
 npm run dev:worker
 ```
 
 - UI: http://localhost:5173  
 - Worker (API + built assets after `npm run build`): http://localhost:8787  
 
+> **X COGS / personal mode:** Background cron keyword polling is **off**. Timeline columns prefer a long-lived D1 `feed_cache` (~6h TTL) and only hit X on explicit column refresh (`?refresh=1`) or **Poll now**. Unbound keyword columns return empty (`needsKeyword`) and do **not** fall back to searching `"xdeck"`. Re-enable `[triggers] crons` in `wrangler.toml` when you want scheduled brand-listen again.
 For a single-process preview of the production shape:
 
 ```bash
@@ -60,7 +61,7 @@ npm run dev:worker
 | Script | Purpose |
 | --- | --- |
 | `npm run dev` | Vite frontend (port 5173, proxies `/api`) |
-| `npm run dev:worker` | `wrangler dev` — Worker + D1 + cron |
+| `npm run dev:worker` | `wrangler dev` — Worker + D1 (cron off) |
 | `npm run build` | Build SPA into `dist/` |
 | `npm run deploy` | Build + `wrangler deploy` |
 | `npm run db:migrate:local` | Apply D1 migrations locally |
@@ -118,7 +119,7 @@ Also in `wrangler.toml` `[vars]`: `APP_NAME`, `PLAN_NAME`.
 4. Add / remove / reorder columns; layout persisted in D1
 5. Multiple X accounts: pick an **active** account (localStorage); new columns bind to it; each column can switch accounts; “Apply active to all columns” rebinds existing ones
 6. Keyword brand-listen with Starter caps (3 keywords, 1,000 mentions/month); pause UI when capped
-7. Cron every 5 minutes for keywords; timeline columns are **manual refresh** + D1 cache-first (cheap personal default)
+7. Keyword polling is **manual** (Poll now); background cron is off by default. Timeline columns are **manual refresh** + D1 cache-first (~6h TTL) to keep X COGS low
 8. Landing at `/`, deck at `/app`
 9. Lists column loads **owned lists** from the column’s bound X account when live (`list.read`); demo mode still uses sample list names
 10. Approximate X **read usage** in the deck header vs personal/Starter soft cap (~500 reads/month)
@@ -144,6 +145,6 @@ Starter: maxKeywords = 3, maxMentionsPerMonth = 1000, maxReadsPerMonth = 500
 Pro / Scale: higher keyword, mention, and read caps (stubs for SaaS tiers)
 ```
 
-**Cheap personal mode** (default): columns load once on open and use a **manual refresh** button — no TweetDeck-style sub-minute auto-poll. Timeline feeds are **cache-first** (D1, ~5 min TTL); live X calls use `since_id` when possible and increment a monthly **reads** counter (~500 soft cap for personal). Keyword columns still use cron + mentions cache; Starter caps (3 keywords / 1,000 mentions) stay hard-enforced.
+**Cheap personal mode** (default): columns load once on open and use a **manual refresh** button — no TweetDeck-style sub-minute auto-poll. Timeline feeds are **cache-first** (D1, ~6h TTL); live X calls use `since_id` when possible and increment a monthly **reads** counter (~500 soft cap for personal). **Background keyword cron is off** — use **Poll now** for explicit keyword search. Unbound keyword columns do not call X (`needsKeyword`). Starter caps (3 keywords / 1,000 mentions) stay hard-enforced.
 
 No overages — when the monthly mention counter hits the cap, keyword polling skips that user and the UI shows a clear capped state.

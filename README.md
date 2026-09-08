@@ -116,11 +116,12 @@ Also in `wrangler.toml` `[vars]`: `APP_NAME`, `PLAN_NAME`.
    - Mentions: `GET /2/users/:id/mentions`
    - Lists: owned lists only; missing/invalid `list_id` skips the X tweets call
 4. Add / remove / reorder columns; layout persisted in D1
-5. Keyword brand-listen with Starter caps (3 keywords, 1,000 mentions/month); pause UI when capped
-6. Cron every 5 minutes for keywords; timeline columns are **manual refresh** + D1 cache-first (cheap personal default)
-7. Landing at `/`, deck at `/app`
-8. Lists column loads **owned lists** from the connected X account when live (`list.read`); demo mode still uses sample list names
-9. Approximate X **read usage** in the deck header vs personal/Starter soft cap (~500 reads/month)
+5. Multiple X accounts: pick an **active** account (localStorage); new columns bind to it; each column can switch accounts; “Apply active to all columns” rebinds existing ones
+6. Keyword brand-listen with Starter caps (3 keywords, 1,000 mentions/month); pause UI when capped
+7. Cron every 5 minutes for keywords; timeline columns are **manual refresh** + D1 cache-first (cheap personal default)
+8. Landing at `/`, deck at `/app`
+9. Lists column loads **owned lists** from the column’s bound X account when live (`list.read`); demo mode still uses sample list names
+10. Approximate X **read usage** in the deck header vs personal/Starter soft cap (~500 reads/month)
 
 ## Out of scope (v0)
 

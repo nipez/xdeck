@@ -100,6 +100,11 @@ code {
   font-size: 1.05rem;
 }
 
+.btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+}
+
 .icon-btn {
   background: transparent;
   border: 0;
@@ -473,8 +478,28 @@ select:focus {
 }
 
 .rail-acct {
-  font-size: 0.65rem;
+  max-width: calc(var(--rail) - 6px);
+  padding: 0.15rem 0.15rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.58rem;
   font-family: var(--mono);
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1.15;
+}
+
+.rail-acct:hover {
+  background: var(--bg-3);
+  color: var(--text);
+}
+
+.rail-acct-text {
+  display: block;
+  /* Handled by formatRailHandle — do not CSS-ellipsis again (double-truncation). */
+  white-space: nowrap;
+  text-align: center;
 }
 
 .rail-cap {
@@ -622,8 +647,32 @@ select:focus {
 }
 
 .col-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.45rem 0.65rem;
   border-bottom: 1px solid var(--border-soft);
+}
+
+.col-toolbar select {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.45rem;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.col-acct-label {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .cap-banner {
@@ -856,11 +905,43 @@ select:focus {
 
 .account-row {
   display: grid;
-  gap: 0.15rem;
+  gap: 0.5rem;
   padding: 0.65rem;
   background: var(--bg-2);
   border-radius: var(--radius);
   border: 1px solid var(--border-soft);
+}
+
+.account-row-active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(61, 214, 198, 0.25);
+}
+
+.account-row-main {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.account-row-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-active-badge {
+  justify-self: start;
+  margin-top: 0.15rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.account-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
 .toast {

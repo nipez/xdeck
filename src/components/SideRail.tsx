@@ -1,10 +1,11 @@
 import type { SessionUser, UsageStatus, XAccount } from "@shared/types";
 import { Link } from "react-router-dom";
+import { formatRailHandle } from "../activeAccount";
 
 export function SideRail({
   user,
   usage,
-  accounts,
+  activeAccount,
   demoMode,
   onAdd,
   onKeywords,
@@ -13,13 +14,15 @@ export function SideRail({
 }: {
   user: SessionUser | null;
   usage: UsageStatus | null;
-  accounts: XAccount[];
+  activeAccount: XAccount | null;
   demoMode: boolean;
   onAdd: () => void;
   onKeywords: () => void;
   onAccounts: () => void;
   onLogout: () => void;
 }) {
+  const fullHandle = activeAccount ? `@${activeAccount.username}` : null;
+
   return (
     <aside className="side-rail">
       <Link to="/" className="rail-brand" title="xdeck home">
@@ -44,10 +47,18 @@ export function SideRail({
         >
           {(user?.displayName || user?.email || "?").charAt(0).toUpperCase()}
         </div>
-        {accounts[0] && (
-          <span className="rail-acct muted" title={`@${accounts[0].username}`}>
-            @{accounts[0].username.slice(0, 4)}
-          </span>
+        {activeAccount && fullHandle && (
+          <button
+            type="button"
+            className="rail-acct muted"
+            title={`${fullHandle} — switch account`}
+            aria-label={`Active account ${fullHandle}. Open accounts panel.`}
+            onClick={onAccounts}
+          >
+            <span className="rail-acct-text">
+              {formatRailHandle(activeAccount.username)}
+            </span>
+          </button>
         )}
         {usage?.capped && <span className="rail-cap">CAP</span>}
         <button className="rail-btn rail-logout" title="Log out" onClick={onLogout}>

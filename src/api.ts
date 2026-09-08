@@ -56,6 +56,7 @@ export const api = {
     title?: string;
     keyword_id?: string;
     list_id?: string;
+    x_account_id?: string;
   }) =>
     request<{ id: string }>("/api/columns", {
       method: "POST",
@@ -126,11 +127,19 @@ export const api = {
       { method: "POST" },
     ),
 
-  lists: () =>
-    request<{
+  disconnectX: (id: string) =>
+    request<{ ok: boolean }>(`/api/x/accounts/${id}`, { method: "DELETE" }),
+
+  lists: (xAccountId?: string | null) => {
+    const q =
+      xAccountId != null && xAccountId !== ""
+        ? `?x_account_id=${encodeURIComponent(xAccountId)}`
+        : "";
+    return request<{
       lists: Array<{ id: string; name: string }>;
       demo?: boolean;
       needsXAccount?: boolean;
       error?: string;
-    }>("/api/lists"),
+    }>(`/api/lists${q}`);
+  },
 };

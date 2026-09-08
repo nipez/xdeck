@@ -24,8 +24,12 @@ export const CRON_KEYWORD_LOOKBACK_MINUTES = 15;
  * Classic TweetDeck-style sub-minute auto-refresh is intentionally off.
  */
 export const PERSONAL_MODE = {
-  /** Soft monthly read budget for personal use (~$2.50 at $0.005/post). */
-  softReadCap: 500,
+  /**
+   * Soft monthly read budget for personal/dev testing.
+   * Raised well above day-to-day solo use so READS CAPPED does not block local testing.
+   * SaaS billed plans still use PLAN_LIMITS.*.maxReadsPerMonth when those apply.
+   */
+  softReadCap: 50_000,
   /**
    * Serve D1-cached timeline posts when fresher than this.
    * Long TTL by default — prefer cache; hit X only on ?refresh=1 / column refresh.

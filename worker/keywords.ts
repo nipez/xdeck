@@ -29,7 +29,11 @@ export async function getUsage(env: Env, userId: string): Promise<UsageStatus> {
 
   const mentionsUsed = usage?.mentions_count ?? 0;
   const readsUsed = usage?.reads_count ?? 0;
-  const maxReads = plan.maxReadsPerMonth ?? PERSONAL_READS_SOFT_CAP;
+  // Starter = personal soft cap; billed plans keep their own maxReadsPerMonth.
+  const maxReads =
+    plan.name === "Starter"
+      ? PERSONAL_READS_SOFT_CAP
+      : (plan.maxReadsPerMonth ?? PERSONAL_READS_SOFT_CAP);
   return {
     plan: plan.name,
     maxKeywords: plan.maxKeywords,
